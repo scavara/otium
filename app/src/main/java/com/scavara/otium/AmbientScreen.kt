@@ -22,6 +22,7 @@ import kotlinx.coroutines.delay
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun AmbientScreen() {
+    // Phase 1 Placeholder Images
     val images = listOf(
         android.R.drawable.ic_menu_gallery,
         android.R.drawable.ic_menu_compass
@@ -29,31 +30,39 @@ fun AmbientScreen() {
 
     var currentIndex by remember { mutableIntStateOf(0) }
 
-    // State to hold the live quote from Heroku
+    // State holding the live quote, initialized with a fallback
     var currentQuote by remember {
         mutableStateOf(QuoteResponse("Breathing in, I calm body and mind.", "Thich Nhat Hanh", ""))
     }
 
-    // Timer: Fetches a new quote and cycles the image every 30 seconds
+    // Master Timer: Fetches a new quote and cycles the image every 30 seconds
     LaunchedEffect(Unit) {
+        // Initial fetch so we don't wait 30 seconds for the first live quote
+        try {
+            currentQuote = QuoteApi.service.getRandomQuote()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
         while (true) {
+            delay(30_000L)
+
+            // Cycle the background image
+            currentIndex = (currentIndex + 1) % images.size
+
+            // Fetch the next live quote from Heroku
             try {
-                // Fetch from your Heroku API
-                val nextQuote = QuoteApi.service.getRandomQuote()
-                currentQuote = nextQuote
+                currentQuote = QuoteApi.service.getRandomQuote()
             } catch (e: Exception) {
-                // If the network fails, it simply keeps showing the previous quote
+                // Fails gracefully; simply keeps the previous quote on screen
                 e.printStackTrace()
             }
-
-            delay(30_000L)
-            currentIndex = (currentIndex + 1) % images.size
         }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
 
-        // Pillar 1: Image Carousel (Unchanged)
+        // Pillar 1: Image Carousel
         Crossfade(
             targetState = images[currentIndex],
             animationSpec = tween(durationMillis = 2000),
@@ -67,6 +76,7 @@ fun AmbientScreen() {
             )
         }
 
+        // TV Optimization: Gradient overlay for text readability
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -80,7 +90,7 @@ fun AmbientScreen() {
 
         // Pillar 2: Dynamic Live Quote Overlay
         Crossfade(
-            targetState = currentQuote, // Now crossfades based on the live object
+            targetState = currentQuote,
             animationSpec = tween(durationMillis = 2000),
             label = "QuoteCrossfade",
             modifier = Modifier
