@@ -1,0 +1,4 @@
+<resources>
+
+    <style name="Theme.Otium" parent="Theme.AppCompat.DayNight.NoActionBar" />
+</resources>
