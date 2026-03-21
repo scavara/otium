@@ -22,71 +22,86 @@ import kotlinx.coroutines.delay
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun AmbientScreen() {
-    // Placeholder data until we connect DynamoDB and S3
-    // Note: You will need to drop two dummy images into your res/drawable folder
-    // and name them placeholder_bg_1 and placeholder_bg_2, or change these IDs to an existing resource like R.drawable.ic_launcher_background
     val images = listOf(
-        android.R.drawable.ic_menu_gallery, // Using default android icons temporarily so it compiles out of the box
+        android.R.drawable.ic_menu_gallery,
         android.R.drawable.ic_menu_compass
-    )
-    val quotes = listOf(
-        "Relax and let go.",
-        "Breathe in the calm."
     )
 
     var currentIndex by remember { mutableIntStateOf(0) }
 
-    // Timer: Cycles every 30 seconds
+    // State to hold the live quote from Heroku
+    var currentQuote by remember {
+        mutableStateOf(QuoteResponse("Breathing in, I calm body and mind.", "Thich Nhat Hanh", ""))
+    }
+
+    // Timer: Fetches a new quote and cycles the image every 30 seconds
     LaunchedEffect(Unit) {
         while (true) {
-            delay(30_000L) 
+            try {
+                // Fetch from your Heroku API
+                val nextQuote = QuoteApi.service.getRandomQuote()
+                currentQuote = nextQuote
+            } catch (e: Exception) {
+                // If the network fails, it simply keeps showing the previous quote
+                e.printStackTrace()
+            }
+
+            delay(30_000L)
             currentIndex = (currentIndex + 1) % images.size
         }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        
-        // Pillar 1: Image Carousel
+
+        // Pillar 1: Image Carousel (Unchanged)
         Crossfade(
             targetState = images[currentIndex],
-            animationSpec = tween(durationMillis = 2000), 
+            animationSpec = tween(durationMillis = 2000),
             label = "ImageCrossfade"
         ) { imageRes ->
             Image(
                 painter = painterResource(id = imageRes),
                 contentDescription = "Ambient Background",
-                contentScale = ContentScale.Crop, 
+                contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
             )
         }
 
-        // TV Optimization: Gradient overlay for text readability
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.8f)),
-                        startY = 600f 
+                        startY = 600f
                     )
                 )
         )
 
-        // Pillar 2: Random Quote Overlay
+        // Pillar 2: Dynamic Live Quote Overlay
         Crossfade(
-            targetState = quotes[currentIndex],
+            targetState = currentQuote, // Now crossfades based on the live object
             animationSpec = tween(durationMillis = 2000),
             label = "QuoteCrossfade",
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 80.dp, start = 48.dp, end = 48.dp) 
-        ) { quote ->
-            Text(
-                text = quote,
-                style = MaterialTheme.typography.headlineLarge,
-                color = Color.White,
-                textAlign = TextAlign.Center
-            )
+                .padding(bottom = 80.dp, start = 48.dp, end = 48.dp)
+        ) { quoteData ->
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "\"${quoteData.quoteText}\"",
+                    style = MaterialTheme.typography.headlineLarge,
+                    color = Color.White,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "— ${quoteData.author}",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.White.copy(alpha = 0.7f),
+                    textAlign = TextAlign.Center
+                )
+            }
         }
     }
 }
