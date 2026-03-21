@@ -2,115 +2,213 @@ package com.scavara.otium
 
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.tv.material3.Button
 import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.Icon
+import androidx.tv.material3.IconButton
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import coil.compose.AsyncImage
+import coil.imageLoader
+import coil.request.ImageRequest
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun AmbientScreen() {
-    // Phase 1 Placeholder Images
-    val images = listOf(
-        android.R.drawable.ic_menu_gallery,
-        android.R.drawable.ic_menu_compass
-    )
+    val context = LocalContext.current
+    val imageLoader = context.imageLoader
 
-    var currentIndex by remember { mutableIntStateOf(0) }
+    // 1. Initialize our Settings Repository and Coroutine Scope
+    val settingsRepo = remember { SettingsRepository(context) }
+    val scope = rememberCoroutineScope()
 
-    // State holding the live quote, initialized with a fallback
-    var currentQuote by remember {
-        mutableStateOf(QuoteResponse("Breathing in, I calm body and mind.", "Thich Nhat Hanh", ""))
-    }
+    // 2. Read preferences from DataStore (These automatically update the UI when changed)
+    val showQuotes by settingsRepo.showQuotesFlow.collectAsState(initial = true)
+    val currentSize by settingsRepo.quoteSizeFlow.collectAsState(initial = QuoteSize.MEDIUM)
+    val currentPosition by settingsRepo.quotePositionFlow.collectAsState(initial = QuotePosition.BOTTOM_START)
 
-    // Master Timer: Fetches a new quote and cycles the image every 30 seconds
-    LaunchedEffect(Unit) {
-        // Initial fetch so we don't wait 30 seconds for the first live quote
-        try {
-            currentQuote = QuoteApi.service.getRandomQuote()
-        } catch (e: Exception) {
-            e.printStackTrace()
+    var showOptions by remember { mutableStateOf(false) }
+
+    // Content States
+    var currentQuote by remember { mutableStateOf("Take a deep breath...") }
+    var currentImageUrl by remember { mutableStateOf("") }
+    var nextQuote by remember { mutableStateOf<String?>(null) }
+    var nextImageUrl by remember { mutableStateOf<String?>(null) }
+    var tick by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(tick) {
+        if (tick == 0) {
+            try {
+                currentImageUrl = UnsplashApi.service.getRandomNatureImage().urls.regular
+                currentQuote = QuoteApi.service.getRandomQuote().formattedQuote
+            } catch (e: Exception) { e.printStackTrace() }
+        } else {
+            if (nextImageUrl != null) currentImageUrl = nextImageUrl as String
+            if (nextQuote != null) currentQuote = nextQuote as String
         }
 
-        while (true) {
-            delay(30_000L)
+        try {
+            val fetchedNextUrl = UnsplashApi.service.getRandomNatureImage().urls.regular
+            val fetchedNextQuote = QuoteApi.service.getRandomQuote().formattedQuote
 
-            // Cycle the background image
-            currentIndex = (currentIndex + 1) % images.size
+            nextImageUrl = fetchedNextUrl
+            nextQuote = fetchedNextQuote
 
-            // Fetch the next live quote from Heroku
-            try {
-                currentQuote = QuoteApi.service.getRandomQuote()
-            } catch (e: Exception) {
-                // Fails gracefully; simply keeps the previous quote on screen
-                e.printStackTrace()
+            imageLoader.enqueue(ImageRequest.Builder(context).data(fetchedNextUrl).build())
+        } catch (e: Exception) { e.printStackTrace() }
+
+        delay(30_000L)
+        tick++
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Crossfade(
+            targetState = tick,
+            animationSpec = tween(durationMillis = 1500),
+            label = "ambient_crossfade"
+        ) { targetTick ->
+            key(targetTick) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    if (currentImageUrl.isNotEmpty()) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(context)
+                                .data(currentImageUrl)
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = "Ambient Nature Background",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                    Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.3f)))
+                }
+            }
+        }
+
+        if (showQuotes) {
+            // 3. Map DataStore enum to actual Compose Alignment
+            val alignment = when (currentPosition) {
+                QuotePosition.TOP_START -> Alignment.TopStart
+                QuotePosition.CENTER -> Alignment.Center
+                QuotePosition.BOTTOM_START -> Alignment.BottomStart
+            }
+
+            // 4. Map DataStore enum to actual Compose Typography sizes
+            val textStyle = when (currentSize) {
+                QuoteSize.SMALL -> MaterialTheme.typography.titleMedium
+                QuoteSize.MEDIUM -> MaterialTheme.typography.headlineMedium
+                QuoteSize.LARGE -> MaterialTheme.typography.displayMedium
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(58.dp),
+                contentAlignment = alignment // Apply dynamic alignment
+            ) {
+                Text(
+                    text = currentQuote,
+                    color = Color.White,
+                    style = textStyle // Apply dynamic text size
+                )
+            }
+        }
+
+        Box(
+            modifier = Modifier.fillMaxSize().padding(32.dp),
+            contentAlignment = Alignment.TopEnd
+        ) {
+            IconButton(onClick = { showOptions = true }) {
+                Icon(Icons.Default.Settings, "Options Menu", tint = Color.White, modifier = Modifier.size(24.dp))
             }
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    if (showOptions) {
+        Dialog(onDismissRequest = { showOptions = false }) {
+            Box(
+                modifier = Modifier
+                    .background(Color.Black.copy(alpha = 0.85f), shape = MaterialTheme.shapes.large)
+                    .padding(48.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text("Otium Settings", style = MaterialTheme.typography.headlineMedium, color = Color.White)
+                    Spacer(modifier = Modifier.height(32.dp))
 
-        // Pillar 1: Image Carousel
-        Crossfade(
-            targetState = images[currentIndex],
-            animationSpec = tween(durationMillis = 2000),
-            label = "ImageCrossfade"
-        ) { imageRes ->
-            Image(
-                painter = painterResource(id = imageRes),
-                contentDescription = "Ambient Background",
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-        }
+                    // Toggle Quotes Button
+                    Button(onClick = { scope.launch { settingsRepo.toggleShowQuotes(showQuotes) } }) {
+                        Text(if (showQuotes) "Quotes: ON" else "Quotes: OFF")
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
 
-        // TV Optimization: Gradient overlay for text readability
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.8f)),
-                        startY = 600f
-                    )
-                )
-        )
+                    // Cycle Text Size Button
+                    Button(onClick = {
+                        scope.launch {
+                            val nextSize = when(currentSize) {
+                                QuoteSize.SMALL -> QuoteSize.MEDIUM
+                                QuoteSize.MEDIUM -> QuoteSize.LARGE
+                                QuoteSize.LARGE -> QuoteSize.SMALL
+                            }
+                            settingsRepo.setQuoteSize(nextSize)
+                        }
+                    }) {
+                        Text("Size: ${currentSize.name}")
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
 
-        // Pillar 2: Dynamic Live Quote Overlay
-        Crossfade(
-            targetState = currentQuote,
-            animationSpec = tween(durationMillis = 2000),
-            label = "QuoteCrossfade",
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 80.dp, start = 48.dp, end = 48.dp)
-        ) { quoteData ->
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = "\"${quoteData.quoteText}\"",
-                    style = MaterialTheme.typography.headlineLarge,
-                    color = Color.White,
-                    textAlign = TextAlign.Center
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "— ${quoteData.author}",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Color.White.copy(alpha = 0.7f),
-                    textAlign = TextAlign.Center
-                )
+                    // Cycle Position Button
+                    Button(onClick = {
+                        scope.launch {
+                            val nextPos = when(currentPosition) {
+                                QuotePosition.BOTTOM_START -> QuotePosition.CENTER
+                                QuotePosition.CENTER -> QuotePosition.TOP_START
+                                QuotePosition.TOP_START -> QuotePosition.BOTTOM_START
+                            }
+                            settingsRepo.setQuotePosition(nextPos)
+                        }
+                    }) {
+                        Text("Position: ${currentPosition.name.replace("_", " ")}")
+                    }
+                    Spacer(modifier = Modifier.height(32.dp))
+
+                    Button(onClick = { showOptions = false }) {
+                        Text("Close")
+                    }
+                }
             }
         }
     }

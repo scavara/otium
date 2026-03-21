@@ -1,25 +1,27 @@
 package com.scavara.otium
 
+import com.scavara.otium.BuildConfig
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.GET
 
-// 1. Data Class mapping exactly to your Heroku JSON keys
 data class QuoteResponse(
     val quoteText: String,
     val author: String,
     val emoji: String
-)
+) {
+    // This custom getter formats the string as: "some message" --author
+    val formattedQuote: String
+        get() = "\"$quoteText\" --$author"
+}
 
-// 2. The API Interface
 interface QuoteApiService {
     @GET("api/quotes/random")
     suspend fun getRandomQuote(): QuoteResponse
 }
 
-// 3. Retrofit Builder setup
 object QuoteApi {
-    private const val BASE_URL = "https://statusquo-1c0c04fdc62e.herokuapp.com/"
+    private val BASE_URL = BuildConfig.QUOTE_BASE_URL
 
     val service: QuoteApiService by lazy {
         Retrofit.Builder()
