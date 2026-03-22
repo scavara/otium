@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -30,6 +31,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
 import androidx.tv.material3.Button
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
@@ -52,10 +56,14 @@ fun AmbientScreen() {
     val settingsRepo = remember { SettingsRepository(context) }
     val scope = rememberCoroutineScope()
 
-    // 2. Read preferences from DataStore (These automatically update the UI when changed)
+    // 2. Read preferences from DataStore
     val showQuotes by settingsRepo.showQuotesFlow.collectAsState(initial = true)
     val currentSize by settingsRepo.quoteSizeFlow.collectAsState(initial = QuoteSize.MEDIUM)
     val currentPosition by settingsRepo.quotePositionFlow.collectAsState(initial = QuotePosition.BOTTOM_START)
+
+    // Audio Preferences
+    val audioEnabled by settingsRepo.audioEnabledFlow.collectAsState(initial = false)
+    val currentSoundscape by settingsRepo.soundscapeFlow.collectAsState(initial = Soundscape.RAIN)
 
     var showOptions by remember { mutableStateOf(false) }
 
@@ -66,6 +74,39 @@ fun AmbientScreen() {
     var nextImageUrl by remember { mutableStateOf<String?>(null) }
     var tick by remember { mutableIntStateOf(0) }
 
+    // Initialize ExoPlayer
+    val exoPlayer = remember {
+        ExoPlayer.Builder(context).build().apply {
+            repeatMode = Player.REPEAT_MODE_ONE // Crucial for gapless looping
+        }
+    }
+
+    // Audio Engine Lifecycle & Track Management
+    LaunchedEffect(audioEnabled, currentSoundscape) {
+        if (audioEnabled) {
+            val audioRes = when(currentSoundscape) {
+                Soundscape.RAIN -> R.raw.rain
+                Soundscape.WAVES -> R.raw.waves
+                Soundscape.FOREST -> R.raw.forest
+                Soundscape.NOISE -> R.raw.white_noise
+            }
+            val mediaItem = MediaItem.fromUri("android.resource://${context.packageName}/$audioRes")
+
+            exoPlayer.setMediaItem(mediaItem)
+            exoPlayer.prepare()
+            exoPlayer.play()
+        } else {
+            exoPlayer.pause()
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            exoPlayer.release()
+        }
+    }
+
+    // Background Image & Quote Cycling
     LaunchedEffect(tick) {
         if (tick == 0) {
             try {
@@ -168,6 +209,28 @@ fun AmbientScreen() {
                 ) {
                     Text("Otium Settings", style = MaterialTheme.typography.headlineMedium, color = Color.White)
                     Spacer(modifier = Modifier.height(32.dp))
+
+                    // Audio Toggle
+                    Button(onClick = { scope.launch { settingsRepo.toggleAudio(audioEnabled) } }) {
+                        Text(if (audioEnabled) "Audio: ON" else "Audio: OFF")
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Soundscape Cycle Button
+                    Button(onClick = {
+                        scope.launch {
+                            val nextTrack = when(currentSoundscape) {
+                                Soundscape.RAIN -> Soundscape.WAVES
+                                Soundscape.WAVES -> Soundscape.FOREST
+                                Soundscape.FOREST -> Soundscape.NOISE
+                                Soundscape.NOISE -> Soundscape.RAIN
+                            }
+                            settingsRepo.setSoundscape(nextTrack)
+                        }
+                    }) {
+                        Text("Soundscape: ${currentSoundscape.name}")
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
 
                     // Toggle Quotes Button
                     Button(onClick = { scope.launch { settingsRepo.toggleShowQuotes(showQuotes) } }) {

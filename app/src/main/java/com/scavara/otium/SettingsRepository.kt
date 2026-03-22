@@ -16,6 +16,7 @@ val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "ot
 // Enums to define our available options
 enum class QuoteSize { SMALL, MEDIUM, LARGE }
 enum class QuotePosition { TOP_START, CENTER, BOTTOM_START }
+enum class Soundscape { RAIN, WAVES, FOREST, NOISE }
 
 class SettingsRepository(private val context: Context) {
 
@@ -24,6 +25,10 @@ class SettingsRepository(private val context: Context) {
         val SHOW_QUOTES = booleanPreferencesKey("show_quotes")
         val QUOTE_SIZE = stringPreferencesKey("quote_size")
         val QUOTE_POSITION = stringPreferencesKey("quote_position")
+
+        // New Audio Keys
+        val AUDIO_ENABLED = booleanPreferencesKey("audio_enabled")
+        val SOUNDSCAPE_TRACK = stringPreferencesKey("soundscape_track")
     }
 
     // --- READ PREFERENCES (Returns flows that automatically update the UI when changed) ---
@@ -39,6 +44,13 @@ class SettingsRepository(private val context: Context) {
         QuotePosition.valueOf(prefs[QUOTE_POSITION] ?: QuotePosition.BOTTOM_START.name)
     }
 
+    // New Audio Flows
+    val audioEnabledFlow: Flow<Boolean> = context.dataStore.data.map { it[AUDIO_ENABLED] ?: false }
+
+    val soundscapeFlow: Flow<Soundscape> = context.dataStore.data.map { prefs ->
+        Soundscape.valueOf(prefs[SOUNDSCAPE_TRACK] ?: Soundscape.RAIN.name)
+    }
+
     // --- WRITE PREFERENCES ---
     suspend fun toggleShowQuotes(current: Boolean) {
         context.dataStore.edit { it[SHOW_QUOTES] = !current }
@@ -50,5 +62,14 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setQuotePosition(position: QuotePosition) {
         context.dataStore.edit { it[QUOTE_POSITION] = position.name }
+    }
+
+    // New Audio Writers
+    suspend fun toggleAudio(current: Boolean) {
+        context.dataStore.edit { it[AUDIO_ENABLED] = !current }
+    }
+
+    suspend fun setSoundscape(track: Soundscape) {
+        context.dataStore.edit { it[SOUNDSCAPE_TRACK] = track.name }
     }
 }
