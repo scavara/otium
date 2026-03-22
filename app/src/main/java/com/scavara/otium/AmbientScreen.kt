@@ -31,6 +31,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
@@ -51,6 +54,7 @@ import kotlinx.coroutines.launch
 fun AmbientScreen() {
     val context = LocalContext.current
     val imageLoader = context.imageLoader
+    val lifecycleOwner = LocalLifecycleOwner.current
 
     // 1. Initialize our Settings Repository and Coroutine Scope
     val settingsRepo = remember { SettingsRepository(context) }
@@ -60,6 +64,7 @@ fun AmbientScreen() {
     val showQuotes by settingsRepo.showQuotesFlow.collectAsState(initial = true)
     val currentSize by settingsRepo.quoteSizeFlow.collectAsState(initial = QuoteSize.MEDIUM)
     val currentPosition by settingsRepo.quotePositionFlow.collectAsState(initial = QuotePosition.BOTTOM_START)
+    val refreshInterval by settingsRepo.refreshIntervalFlow.collectAsState(initial = 120)
 
     // Audio Preferences
     val audioEnabled by settingsRepo.audioEnabledFlow.collectAsState(initial = false)
@@ -74,14 +79,14 @@ fun AmbientScreen() {
     var nextImageUrl by remember { mutableStateOf<String?>(null) }
     var tick by remember { mutableIntStateOf(0) }
 
-    // Initialize ExoPlayer
+    // --- Audio Setup ---
     val exoPlayer = remember {
         ExoPlayer.Builder(context).build().apply {
-            repeatMode = Player.REPEAT_MODE_ONE // Crucial for gapless looping
+            repeatMode = Player.REPEAT_MODE_ONE // Gapless single-track loop
         }
     }
 
-    // Audio Engine Lifecycle & Track Management
+    // 1. Audio Engine Lifecycle & Track Management
     LaunchedEffect(audioEnabled, currentSoundscape) {
         if (audioEnabled) {
             val audioRes = when(currentSoundscape) {
@@ -90,7 +95,15 @@ fun AmbientScreen() {
                 Soundscape.FOREST -> R.raw.forest
                 Soundscape.NOISE -> R.raw.white_noise
             }
-            val mediaItem = MediaItem.fromUri("android.resource://${context.packageName}/$audioRes")
+
+            // Build the URI dynamically based on the application package
+            val uri = android.net.Uri.Builder()
+                .scheme(android.content.ContentResolver.SCHEME_ANDROID_RESOURCE)
+                .authority(context.packageName)
+                .appendPath(audioRes.toString())
+                .build()
+
+            val mediaItem = MediaItem.fromUri(uri)
 
             exoPlayer.setMediaItem(mediaItem)
             exoPlayer.prepare()
@@ -100,13 +113,31 @@ fun AmbientScreen() {
         }
     }
 
+    // 2. Screen Lifecycle (Pause when TV goes to sleep / App backgrounded)
+    DisposableEffect(lifecycleOwner, audioEnabled) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                // Only auto-play if the user actually has audio enabled in settings
+                Lifecycle.Event.ON_RESUME -> if (audioEnabled) exoPlayer.play()
+                Lifecycle.Event.ON_PAUSE -> exoPlayer.pause()
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            // Player is NOT released here so it survives setting toggles
+        }
+    }
+
+    // 3. True Player Cleanup (Only when the screen is actually destroyed)
     DisposableEffect(Unit) {
         onDispose {
             exoPlayer.release()
         }
     }
 
-    // Background Image & Quote Cycling
     LaunchedEffect(tick) {
         if (tick == 0) {
             try {
@@ -128,7 +159,7 @@ fun AmbientScreen() {
             imageLoader.enqueue(ImageRequest.Builder(context).data(fetchedNextUrl).build())
         } catch (e: Exception) { e.printStackTrace() }
 
-        delay(30_000L)
+        delay(refreshInterval * 1000L)
         tick++
     }
 
@@ -265,6 +296,17 @@ fun AmbientScreen() {
                         }
                     }) {
                         Text("Position: ${currentPosition.name.replace("_", " ")}")
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Cycle Refresh Interval Button
+                    Button(onClick = {
+                        scope.launch {
+                            val nextInterval = if (refreshInterval >= 300) 120 else refreshInterval + 60
+                            settingsRepo.setRefreshInterval(nextInterval)
+                        }
+                    }) {
+                        Text("Refresh: ${refreshInterval / 60} mins")
                     }
                     Spacer(modifier = Modifier.height(32.dp))
 

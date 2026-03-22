@@ -14,7 +14,7 @@ android {
         minSdk = 30
         targetSdk = 36
         versionCode = 1
-        versionName = "1.0"
+        versionName = "1.0.0"
 
         // Logic to safely read the Unsplash key from local.properties
         val localProperties = Properties()
@@ -86,4 +86,7 @@ dependencies {
     // Add to your dependencies block
     implementation("androidx.media3:media3-exoplayer:1.2.1")
     implementation("androidx.media3:media3-ui:1.2.1")
+
+    // Media3 / ExoPlayer for Gapless Audio
+    implementation(libs.androidx.media3.exoplayer)
 }

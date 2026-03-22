@@ -1,28 +1,29 @@
-# Otium 📺
-
+# Otium
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.2.10-blue) ![Platform](https://img.shields.io/badge/Android%20TV-green) ![Material 3](https://img.shields.io/badge/UI-Material%203%20(TV)-8E75B2) ![Unsplash](https://img.shields.io/badge/Images-Unsplash%20API-black) ![Built with Gemini](https://img.shields.io/badge/Built%20with-Gemini-8E75B2) ![License](https://img.shields.io/badge/License-MIT-green)
 
-**Otium** is an ambient background application for Android TV designed to turn your television into a serene window of inspiration. Using Jetpack Compose for TV and high-resolution nature photography, it cycles through dynamic backgrounds and motivational quotes with professional-grade performance and persistence.
+Transform your Android TV into a calming focal point. Otium is an ambient relaxation app designed to bring tranquility to your living space through beautiful nature photography, inspiring quotes, and seamless audio soundscapes.
 
-> 💡 **Built with AI:** This entire project—from the Kotlin implementation and network layer to the caching strategies—was developed in collaboration with **Google Gemini**.
+## Features
 
----
+* **Dynamic Visuals:** Enjoy a rotating gallery of stunning, high-resolution nature backgrounds powered by the Unsplash API.
+* **Inspirational Quotes:** Cultivate mindfulness with curated quotes. You can easily adjust the text size, toggle visibility, and change the screen position to suit your aesthetic.
+* **Immersive Soundscapes:** Choose from four gapless audio loops to match your mood: Rain, Waves, Forest, and White Noise.
+* **Custom Pacing:** Tailor the experience by adjusting the background refresh interval from 2 up to 5 minutes.
+* **Smart Lifecycle Management:** Otium intelligently pauses audio when your TV goes to sleep or switches to another app, resuming seamlessly when you return.
 
-## ✨ Key Features (Phase 2)
+## Installation (Sideloading on Android TV)
 
-Unlike basic "slideshow" apps, Otium focuses on a seamless, high-performance TV experience:
+Since Otium is currently distributed directly via GitHub, you will need to sideload the app onto your Android TV.
 
-* **Dynamic Backgrounds:** Integrates the **Unsplash API** to fetch high-resolution, landscape nature photography on the fly.
-* **Live Quote Integration:** Pulls real-time, witty quotes from the [StatusQuo Backend](https://statusquo-1c0c04fdc62e.herokuapp.com/).
-* **Silent Pre-fetching:** Implements a dual-state buffer logic; while you view the current scene, the app silently downloads and caches the next image to guarantee a zero-latency transition.
-* **Robust Caching:** Powered by **Coil**, the app aggressively manages local TV storage (100MB limit) to save bandwidth and ensure offline resilience.
-* **Customizable Experience:** A TV-native settings dialog allows users to toggle quotes and cycle through different text sizes and screen positions.
-* **Persistent Settings:** Uses **Jetpack DataStore** to remember user preferences across app reboots.
+1. Navigate to the **Releases** section on the right side of this repository.
+2. Download the latest `app-release.apk` file to your computer or smartphone.
+3. Transfer the APK file to your Android TV. You can do this using a USB flash drive or a Wi-Fi transfer app like "Send Files to TV" (available on the Google Play Store for both mobile and TV).
+4. On your Android TV, go to **Settings > Device Preferences > Security & Restrictions**.
+5. Enable **Unknown Sources** for your chosen file manager app.
+6. Open your file manager, locate the downloaded `app-release.apk`, and select it to install.
 
----
-
-## 📸 Demo
-*(Add a screenshot of your Otium app running in the Television 4K AVD here)*
+## 📸
+![Otium](assets/otium.png)
 
 ---
 
@@ -32,16 +33,22 @@ Otium uses a modern Android architecture with a focus on non-blocking I/O and ef
 
 ```mermaid
 graph TD
-    TV[Android TV Device] -->|LaunchedEffect| Timer[30s Master Timer]
+    TV[Android TV Device] -->|Lifecycle Events| Audio[ExoPlayer / Media3]
+    TV -->|LaunchedEffect| Timer[Dynamic Master Timer]
+    
     Timer -->|Request| Unsplash[Unsplash API]
-    Timer -->|Request| SQuo[StatusQuo Heroku API]
+    Timer -->|Request| QuoteAPI[Quote API]
     
     Unsplash -->|Image URL| Coil[Coil Image Loader]
     Coil -->|Prefetch & Cache| Disk[(Local Disk Cache)]
     
-    SQuo -->|Quote JSON| State[UI State]
+    QuoteAPI -->|Quote JSON| State[UI State]
     Disk -->|Instant Load| Screen[AmbientScreen Composable]
+    Audio -->|Gapless Playback| Screen
     
     User((User)) -->|D-Pad Select| Settings[Options Dialog]
     Settings -->|Save| DStore[(Jetpack DataStore)]
-    DStore -->|Observe| Screen
+    
+    DStore -->|Observe Preferences| Screen
+    DStore -->|Refresh Interval| Timer
+    DStore -->|Observe Sound Type| Audio

@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -25,8 +26,9 @@ class SettingsRepository(private val context: Context) {
         val SHOW_QUOTES = booleanPreferencesKey("show_quotes")
         val QUOTE_SIZE = stringPreferencesKey("quote_size")
         val QUOTE_POSITION = stringPreferencesKey("quote_position")
+        val REFRESH_INTERVAL = intPreferencesKey("refresh_interval")
 
-        // New Audio Keys
+        // Audio Keys
         val AUDIO_ENABLED = booleanPreferencesKey("audio_enabled")
         val SOUNDSCAPE_TRACK = stringPreferencesKey("soundscape_track")
     }
@@ -44,7 +46,12 @@ class SettingsRepository(private val context: Context) {
         QuotePosition.valueOf(prefs[QUOTE_POSITION] ?: QuotePosition.BOTTOM_START.name)
     }
 
-    // New Audio Flows
+    val refreshIntervalFlow: Flow<Int> = context.dataStore.data.map { prefs ->
+        // Default to 120 seconds (2 minutes)
+        prefs[REFRESH_INTERVAL] ?: 120
+    }
+
+    // Audio Flows
     val audioEnabledFlow: Flow<Boolean> = context.dataStore.data.map { it[AUDIO_ENABLED] ?: false }
 
     val soundscapeFlow: Flow<Soundscape> = context.dataStore.data.map { prefs ->
@@ -64,7 +71,11 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { it[QUOTE_POSITION] = position.name }
     }
 
-    // New Audio Writers
+    suspend fun setRefreshInterval(seconds: Int) {
+        context.dataStore.edit { it[REFRESH_INTERVAL] = seconds }
+    }
+
+    // Audio Writers
     suspend fun toggleAudio(current: Boolean) {
         context.dataStore.edit { it[AUDIO_ENABLED] = !current }
     }
